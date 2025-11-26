@@ -2,73 +2,83 @@ pipeline {
     agent any
     
     environment {
-        DOCKER_IMAGE = "imt2023103/todo-app"
-        DOCKER_TAG = "${BUILD_NUMBER}"
-        DOCKERHUB_CREDENTIALS = credentials('dockerhub-credentials')
+        DOCKERHUB_USERNAME = 'hades504'
+        IMAGE_NAME = 'hades504/imt2023103-todo-cli'
+        IMAGE_TAG = "${BUILD_NUMBER}"
+
+        GITHUB_CREDS = credentials('githubcicd')
+        DOCKERHUB_CREDS = credentials('ci/cddocker')
     }
     
     stages {
-        stage('Pull Code from GitHub') {
+
+        stage('Checkout') {
             steps {
-                echo 'Pulling code from GitHub...'
-                git branch: 'main', url: 'https://github.com/YOUR_USERNAME/IMT2023103.git'
+                echo "Pulling code from GitHub..."
+                git branch: 'main',
+                    url: 'git@github.com:NirbhaySharma504/Todo-CI-CD.git',
+                    credentialsId: 'githubcicd'
             }
         }
-        
-        stage('Setup Python Environment') {
+
+        stage('Build - Install Dependencies') {
             steps {
-                echo 'Setting up Python environment...'
+                echo "Setting up Python virtual environment..."
                 sh '''
-                    python3 --version
-                    pip3 install --user -r requirements.txt || true
+                    python3 -m venv venv
+                    . venv/bin/activate
+                    pip install --upgrade pip
+                    pip install -r requirements.txt
+                    pip install pytest
                 '''
             }
         }
-        
-        stage('Test') {
+
+        stage('Run Tests') {
             steps {
-                echo 'Running tests...'
-                sh 'python3 todo_app.py test'
+                echo "Running Python tests..."
+                sh '''
+                    . venv/bin/activate
+                    python3 todo_app.py test
+                '''
             }
         }
-        
+
         stage('Build Docker Image') {
-            when {
-                expression { currentBuild.result == null || currentBuild.result == 'SUCCESS' }
-            }
             steps {
-                echo 'Building Docker image...'
-                sh """
-                    docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} .
-                    docker tag ${DOCKER_IMAGE}:${DOCKER_TAG} ${DOCKER_IMAGE}:latest
-                """
+                echo "Building Docker image..."
+                sh "docker build -t ${DOCKERHUB_USERNAME}/${IMAGE_NAME}:${IMAGE_TAG} ."
+                sh "docker tag ${DOCKERHUB_USERNAME}/${IMAGE_NAME}:${IMAGE_TAG} ${DOCKERHUB_USERNAME}/${IMAGE_NAME}:latest"
             }
         }
-        
-        stage('Push to DockerHub') {
-            when {
-                expression { currentBuild.result == null || currentBuild.result == 'SUCCESS' }
-            }
+
+        stage('Push to Docker Hub') {
             steps {
-                echo 'Pushing to DockerHub...'
-                sh """
-                    echo \$DOCKERHUB_CREDENTIALS_PSW | docker login -u \$DOCKERHUB_CREDENTIALS_USR --password-stdin
-                    docker push ${DOCKER_IMAGE}:${DOCKER_TAG}
-                    docker push ${DOCKER_IMAGE}:latest
-                """
+                echo "Pushing Docker image..."
+                sh "echo \$DOCKERHUB_CREDS_PSW | docker login -u \$DOCKERHUB_CREDS_USR --password-stdin"
+                sh "docker push ${DOCKERHUB_USERNAME}/${IMAGE_NAME}:${IMAGE_TAG}"
+                sh "docker push ${DOCKERHUB_USERNAME}/${IMAGE_NAME}:latest"
+                sh "docker logout"
+            }
+        }
+
+        stage('Verify Docker Image') {
+            steps {
+                echo "Verifying Docker image..."
+                sh "docker images | grep ${IMAGE_NAME}"
             }
         }
     }
-    
+
     post {
-        always {
-            sh 'docker logout'
-        }
         success {
-            echo 'Pipeline completed successfully!'
+            echo "✓ Pipeline completed successfully!"
         }
         failure {
-            echo 'Pipeline failed!'
+            echo "✗ Pipeline failed!"
+        }
+        always {
+            cleanWs()
         }
     }
 }
