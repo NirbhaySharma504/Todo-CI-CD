@@ -16,7 +16,7 @@ pipeline {
             steps {
                 echo "Pulling code from GitHub..."
                 git branch: 'main',
-                    url: 'git@github.com:NirbhaySharma504/Todo-CI-CD.git',
+                    url: 'https://github.com/NirbhaySharma504/Todo-CI-CD.git',
                     credentialsId: 'githubcicd'
             }
         }
